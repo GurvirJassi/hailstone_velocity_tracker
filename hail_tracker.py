@@ -68,8 +68,9 @@ class CameraCalibrator:
 class HailDetector:
     def __init__(self, model_path="yolov8n.pt"):
         self.model = YOLO(model_path)
-        self.hail_class_id = 0  # Make sure this matches your model's hail class ID
+        self.hail_class_id = 0  # Update this to your hail class ID
         self.min_confidence = 0.5
+        self.pixel_to_meter = 0.001  # Conversion factor (adjust based on your setup)
         
     def detect(self, frame):
         results = self.model(frame)
@@ -79,13 +80,11 @@ class HailDetector:
             for box in r.boxes:
                 if int(box.cls[0].item()) == self.hail_class_id and box.conf[0].item() >= self.min_confidence:
                     x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                    # Only consider objects in lower 2/3 of frame
-                    if y1 > frame.shape[0] * 0.33:
-                        detections.append({
-                            'bbox': [x1, y1, x2, y2],
-                            'confidence': box.conf[0].item(),
-                            'class': int(box.cls[0].item())
-                        })
+                    detections.append({
+                        'bbox': [x1, y1, x2, y2],
+                        'confidence': box.conf[0].item(),
+                        'class': int(box.cls[0].item())
+                    })
         return detections
         
 class DeepSortTracker:
@@ -118,12 +117,19 @@ class HailstoneTracker:
         self.tracker_left = DeepSortTracker()
         self.tracker_right = DeepSortTracker()
         self.tracks_3d = defaultdict(lambda: {
-            'positions': [], 'timestamps': [], 
-            'velocity': None, 'energy': None, 'impact': False
+            'positions': [],
+            'timestamps': [],
+            'velocity': None,
+            'energy': None,
+            'impact': False,
+            'impact_registered': False
         })
-        self.ground_z = 0.1  # Ground plane threshold (meters)
+        self.ground_z = 0.15  # Adjusted ground threshold (meters)
         self.hail_mass = 0.01  # 10g hail mass
+        self.min_impact_speed = 1.5  # Reduced minimum speed (m/s)
         self.impact_data = []
+        self.paused = False
+        self.show_both_views = True
 
     def _get_center(self, bbox):
         return ((bbox[0] + bbox[2])/2, (bbox[1] + bbox[3])/2)
@@ -190,24 +196,24 @@ class HailstoneTracker:
                 })
                 print(f"IMPACT! ID: {track_id} Speed: {speed:.2f}m/s Energy: {track['energy']:.3f}J")
 
-    def _draw_info(self, frame, bbox, track_id):
+    def _draw_tracking_info(self, frame, bbox, track_id, color=(0, 255, 0)):
         track = self.tracks_3d[track_id]
-        color = (0, 0, 255) if track['impact'] else (0, 255, 0)
         x1, y1, x2, y2 = map(int, bbox)
         
+        # Draw bounding box
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         
+        # Draw tracking info
         info = [
             f"ID: {track_id}",
-            f"Z: {track['positions'][-1][2]:.2f}m",
-            f"Speed: {np.linalg.norm(track['velocity']):.2f}m/s" if track['velocity'] is not None else "",
-            f"Energy: {track['energy']:.3f}J" if track['energy'] is not None else ""
+            f"Vel: {np.linalg.norm(track['velocity']):.2f}m/s" if track['velocity'] is not None else "Vel: -",
+            f"Z: {track['positions'][-1][2]:.2f}m" if len(track['positions']) > 0 else "Z: -"
         ]
         
         for i, text in enumerate(info):
-            if text:  # Only draw non-empty strings
-                cv2.putText(frame, text, (x1, y1 - 30 + i*20), 
-                          cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+            cv2.putText(frame, text, (x1, y1 - 30 + i*20), 
+                      cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+
 
     def _save_impacts(self):
         if not self.impact_data:
@@ -230,51 +236,61 @@ class HailstoneTracker:
     def run(self):
         try:
             while True:
-                frames = self.camera.get_frames()
-                if frames[0] is None or frames[1] is None:
-                    break
-                    
-                frame_left, frame_right = frames
-                
-                try:
-                    frame_left, frame_right, Q = self.calibrator.rectify_images(frame_left, frame_right)
-                except Exception as e:
-                    print(f"Rectification error: {e}")
-                    continue
-                
-                triangulator = Triangulator(Q)
-                
-                # Detection and tracking
-                detections_left = self.detector.detect(frame_left)
-                detections_right = self.detector.detect(frame_right)
-                
-                # Skip frame if no detections
-                if not detections_left or not detections_right:
-                    cv2.imshow("Left View", frame_left)
-                    if cv2.waitKey(1) == ord('q'):
+                if not self.paused:
+                    frames = self.camera.get_frames()
+                    if frames[0] is None or frames[1] is None:
                         break
-                    continue
-                
-                tracks_left = self.tracker_left.track(detections_left, frame_left)
-                tracks_right = self.tracker_right.track(detections_right, frame_right)
-                
-                # Process matched pairs
-                matched_pairs = self._match_tracks(tracks_left, tracks_right)
-                for (left_id, left_bbox), (right_id, right_bbox) in matched_pairs:
+                        
+                    frame_left, frame_right = frames
+                    
                     try:
-                        position = triangulator.triangulate(
-                            self._get_center(left_bbox), 
-                            self._get_center(right_bbox)
-                        )
-                        self._update_track(left_id, position)
-                        self._draw_info(frame_left, left_bbox, left_id)
+                        frame_left_rect, frame_right_rect, Q = self.calibrator.rectify_images(frame_left, frame_right)
                     except Exception as e:
-                        print(f"Tracking error: {e}")
+                        print(f"Rectification error: {e}")
                         continue
+                    
+                    triangulator = Triangulator(Q)
+                    
+                    # Detection and tracking
+                    detections_left = self.detector.detect(frame_left_rect)
+                    detections_right = self.detector.detect(frame_right_rect)
+                    
+                    tracks_left = self.tracker_left.track(detections_left, frame_left_rect)
+                    tracks_right = self.tracker_right.track(detections_right, frame_right_rect)
+                    
+                    # Process matched pairs
+                    matched_pairs = self._match_tracks(tracks_left, tracks_right)
+                    for (left_id, left_bbox), (right_id, right_bbox) in matched_pairs:
+                        try:
+                            position = triangulator.triangulate(
+                                self._get_center(left_bbox), 
+                                self._get_center(right_bbox)
+                            )
+                            self._update_track(left_id, position)
+                            self._draw_tracking_info(frame_left_rect, left_bbox, left_id)
+                            self._draw_tracking_info(frame_right_rect, right_bbox, right_id)
+                        except Exception as e:
+                            print(f"Tracking error: {e}")
+                            continue
                 
-                cv2.imshow("Left View", frame_left)
-                if cv2.waitKey(1) == ord('q'):
+                # Display frames
+                if self.show_both_views:
+                    # Combine frames side by side
+                    display_frame = np.hstack((frame_left_rect, frame_right_rect))
+                else:
+                    display_frame = frame_left_rect
+                
+                cv2.imshow("Hailstone Tracker", display_frame)
+                
+                # Keyboard controls
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('q'):
                     break
+                elif key == ord(' '):  # Space to pause/resume
+                    self.paused = not self.paused
+                    print("Paused" if self.paused else "Resumed")
+                elif key == ord('v'):  # Toggle view
+                    self.show_both_views = not self.show_both_views
                     
         finally:
             self.camera.release()

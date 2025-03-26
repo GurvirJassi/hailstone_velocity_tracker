@@ -319,7 +319,7 @@ class ObjectTracker3D:
         print("Saved tracking data to tracking_results.json")
 
     def run(self):
-        self.frame_times.append(time.time() - self.start_time)
+        
         try:
             self.show_both_views = True  # Always show both views by default
             

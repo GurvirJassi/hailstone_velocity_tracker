@@ -40,22 +40,17 @@ class HailSimulator:
             x_world += vx * t
             
             # Check if hit ground
-            if y_world >= self.ground_level:
+            if y_world >= self.ground_level and path['impact_frame'] is None:
                 path['impact_frame'] = frame
-                # Record final metrics
-                velocity = (vx, vz, 0)
-                mass = 0.01  # 10g hailstone
-                energy = 0.5 * mass * (vx**2 + vz**2)
+                # Don't break - let object continue falling
                 self.final_metrics.append({
                     'hail_id': 0,
                     'entry_frame': entry_frame,
                     'impact_frame': frame,
-                    'final_velocity': velocity,
-                    'kinetic_energy': energy,
-                    'impact_position': (x_world, y_world, z_world)
+                    'final_velocity': (vx, vz, 0),
+                    'impact_position': (x_world, y_world, z_world),
                 })
-                break
-            
+                        
             # Left camera view (no shift)
             path['left'].append((x_world, y_world))
             
@@ -67,7 +62,7 @@ class HailSimulator:
             self.ground_truth[0].append({
                 'frame': frame,
                 'position': (x_world, y_world, z_world),
-                'velocity': (vx, vz, 0)
+                'velocity': (vx, vz, 0),
             })
         
         paths.append(path)
@@ -122,6 +117,22 @@ class HailSimulator:
         # Save final metrics
         with open('test_videos/final_metrics.json', 'w') as f:
             json.dump(self.final_metrics, f)
+
+        def create_test_videos(self, paths):
+        
+            # ... existing video creation code ...
+            metadata = {
+                'expected_impact_z': 0.15,
+                'baseline': self.baseline,
+                'frames': [{
+                    'frame': i,
+                    'left_pos': paths[0]['left'][i] if i < len(paths[0]['left']) else None,
+                    'right_pos': paths[0]['right'][i] if i < len(paths[0]['right']) else None,
+                    'world_pos': self.ground_truth[0][i]['position'] if i < len(self.ground_truth[0]) else None
+                } for i in range(max_frames)]
+            }
+            with open('test_videos/simulation_metadata.json', 'w') as f:
+                json.dump(metadata, f)
 
 if __name__ == "__main__":
     print("Generating test video with single hailstone...")

@@ -1,12 +1,11 @@
 import cv2
-import time  # Added this import
+import time
 import numpy as np
-import json  # Added for config loading
+import json
 from collections import defaultdict
 from deep_sort_realtime.deepsort_tracker import DeepSort
 from ultralytics import YOLO
 from camera.stereo_capture import StereoCamera
-
 
 class CameraCalibrator:
     def __init__(self, config_path):
@@ -65,12 +64,14 @@ class CameraCalibrator:
         except Exception as e:
             raise RuntimeError(f"Stereo rectification failed: {str(e)}")
 
-class HailDetector:
+class ObjectDetector:
     def __init__(self, model_path="yolov8n.pt"):
+        """
+        Generic object detector that tracks any detectable objects
+        """
         self.model = YOLO(model_path)
-        self.hail_class_id = 0  # Update this to your hail class ID
         self.min_confidence = 0.5
-        self.pixel_to_meter = 0.001  # Conversion factor (adjust based on your setup)
+        self.min_size = 20  # Minimum object size in pixels
         
     def detect(self, frame):
         results = self.model(frame)
@@ -78,22 +79,26 @@ class HailDetector:
         
         for r in results:
             for box in r.boxes:
-                if int(box.cls[0].item()) == self.hail_class_id and box.conf[0].item() >= self.min_confidence:
+                if box.conf[0].item() >= self.min_confidence:
                     x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                    detections.append({
-                        'bbox': [x1, y1, x2, y2],
-                        'confidence': box.conf[0].item(),
-                        'class': int(box.cls[0].item())
-                    })
+                    # Filter by size
+                    if (x2 - x1) >= self.min_size and (y2 - y1) >= self.min_size:
+                        detections.append({
+                            'bbox': [x1, y1, x2, y2],
+                            'confidence': box.conf[0].item(),
+                            'class_id': int(box.cls[0].item())
+                        })
         return detections
-        
+
 class DeepSortTracker:
     def __init__(self, max_age=30):
         self.tracker = DeepSort(max_age=max_age)
         
     def track(self, detections, frame):
         tracks = self.tracker.update_tracks(
-            [([d['bbox'][0], d['bbox'][1], d['bbox'][2]-d['bbox'][0], d['bbox'][3]-d['bbox'][1]], d['confidence'], d['class']) 
+            [([d['bbox'][0], d['bbox'][1], d['bbox'][2]-d['bbox'][0], d['bbox'][3]-d['bbox'][1]], 
+              d['confidence'], 
+              str(d['class_id']))  # Using class_id as string for DeepSort
              for d in detections],
             frame=frame
         )
@@ -101,35 +106,38 @@ class DeepSortTracker:
 
 class Triangulator:
     def __init__(self, Q_matrix):
+        """
+        Q_matrix: Stereo rectification matrix from cv2.stereoRectify()
+        Converts pixel coordinates + disparity to real-world 3D coordinates (meters)
+        """
         self.Q = Q_matrix
         
     def triangulate(self, point_left, point_right):
         disparity = abs(point_left[0] - point_right[0])
         homog_point = np.array([point_left[0], point_left[1], disparity, 1.0])
         point_3d = np.dot(self.Q, homog_point)
-        return point_3d[:3] / point_3d[3]  # Return x,y,z in meters
+        return point_3d[:3] / point_3d[3]  # Returns x,y,z in meters
 
-class HailstoneTracker:
+class ObjectTracker3D:
     def __init__(self, config_path, video_sources=(0, 1)):
         self.calibrator = CameraCalibrator(config_path)
         self.camera = StereoCamera(*video_sources)
-        self.detector = HailDetector()
+        self.detector = ObjectDetector()
         self.tracker_left = DeepSortTracker()
         self.tracker_right = DeepSortTracker()
         self.tracks_3d = defaultdict(lambda: {
-            'positions': [],
-            'timestamps': [],
-            'velocity': None,
-            'energy': None,
+            'positions': [],       # Stores 3D positions in meters
+            'timestamps': [],      # Stores corresponding timestamps
+            'velocity': None,      # Current 3D velocity vector (m/s)
+            'velocity_history': [], # History of velocity measurements
             'impact': False,
             'impact_registered': False
         })
-        self.ground_z = 0.15  # Adjusted ground threshold (meters)
-        self.hail_mass = 0.01  # 10g hail mass
-        self.min_impact_speed = 1.5  # Reduced minimum speed (m/s)
+        self.ground_z = 0.15       # Ground threshold in meters (adjust based on your setup)
+        self.min_impact_speed = 1.5 # Minimum speed for impact detection (m/s)
         self.impact_data = []
         self.paused = False
-        self.show_both_views = True
+        self.show_both_views = False  # Show single view by default
 
     def _get_center(self, bbox):
         return ((bbox[0] + bbox[2])/2, (bbox[1] + bbox[3])/2)
@@ -164,77 +172,157 @@ class HailstoneTracker:
 
     def _update_track(self, track_id, position):
         track = self.tracks_3d[track_id]
-        track['positions'].append(position)
-        track['timestamps'].append(time.time())
+        current_time = time.time()
         
+        # Store position and timestamp
+        track['positions'].append(position)
+        track['timestamps'].append(current_time)
+        
+        # Keep only recent positions (5 frames) for velocity calculation
+        if len(track['positions']) > 5:
+            track['positions'].pop(0)
+            track['timestamps'].pop(0)
+        
+        # Only calculate velocity if we have enough data
         if len(track['positions']) >= 2:
-            # Calculate velocity (m/s)
-            disp = np.diff(track['positions'], axis=0)[-1]
-            dt = track['timestamps'][-1] - track['timestamps'][-2]
-            dt = max(dt, 1/30)  # Prevent division by zero
-            track['velocity'] = disp / dt
-            
-            # Calculate kinetic energy (Joules)
-            speed = np.linalg.norm(track['velocity'])
-            track['energy'] = 0.5 * self.hail_mass * (speed ** 2)
-            
-            # Check for impact conditions
-            if (position[2] <= self.ground_z and 
-                not track['impact_registered'] and 
-                speed >= self.min_impact_speed):
+            try:
+                # Convert to numpy arrays for vector operations
+                positions = np.array(track['positions'])
+                timestamps = np.array(track['timestamps'])
                 
-                track['impact'] = True
-                track['impact_registered'] = True
+                # Calculate time differences (ensure minimum delta)
+                time_deltas = np.diff(timestamps)
+                time_deltas = np.maximum(time_deltas, 1/30)  # Minimum 1/30s (30fps)
                 
-                self.impact_data.append({
-                    'id': track_id,
-                    'position': position,
-                    'velocity': track['velocity'].tolist(),
-                    'speed': speed,
-                    'energy': track['energy'],
-                    'time': time.time()
-                })
-                print(f"IMPACT! ID: {track_id} Speed: {speed:.2f}m/s Energy: {track['energy']:.3f}J")
+                # Calculate displacements in meters
+                displacements = np.diff(positions, axis=0)
+                
+                # Calculate instantaneous velocities (m/s)
+                velocities = displacements / time_deltas[:, np.newaxis]
+                
+                # Use median for stability against outliers
+                current_velocity = np.median(velocities, axis=0)
+                
+                # Validate velocity
+                if not np.any(np.isnan(current_velocity)):
+                    track['velocity'] = current_velocity
+                    track['velocity_history'].append(current_velocity)
+                    
+                # Debug output
+                print(f"\nTrack {track_id} Update:")
+                print(f"Positions: {positions[-3:]}")
+                print(f"Time deltas: {time_deltas[-3:]}")
+                print(f"Displacements: {displacements[-3:]}")
+                print(f"Velocities: {velocities[-3:]}")
+                print(f"Current Velocity: {current_velocity}")
+                
+                # Impact detection
+                if (position[2] <= self.ground_z and 
+                    not track['impact_registered'] and 
+                    track['velocity'] is not None):
+                    
+                    speed = np.linalg.norm(track['velocity'])
+                    z_vel = track['velocity'][2]
+                    
+                    if speed >= self.min_impact_speed and z_vel < 0:
+                        track['impact'] = True
+                        track['impact_registered'] = True
+                        self.impact_data.append({
+                            'id': track_id,
+                            'position': position,
+                            'velocity': track['velocity'].tolist(),
+                            'speed': speed,
+                            'time': current_time
+                        })
+                        print(f"\nIMPACT DETECTED! ID: {track_id}")
+                        print(f"Speed: {speed:.2f}m/s")
+                        print(f"Z-velocity: {z_vel:.2f}m/s")
+                        print(f"Position: {position}")
+                        
+            except Exception as e:
+                print(f"\nVelocity calculation error for track {track_id}:")
+                print(f"Error: {str(e)}")
+                print(f"Positions: {track['positions']}")
+                print(f"Timestamps: {track['timestamps']}")
 
     def _draw_tracking_info(self, frame, bbox, track_id, color=(0, 255, 0)):
+       
         track = self.tracks_3d[track_id]
         x1, y1, x2, y2 = map(int, bbox)
         
         # Draw bounding box
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         
+        # Draw center point
+        center = ((x1+x2)//2, (y1+y2)//2)
+        cv2.circle(frame, center, 5, (0, 0, 255), -1)
+        
+        # Get velocity with fallback
+        vel = track.get('velocity', None)
+        vel_norm = np.linalg.norm(vel) if vel is not None else 0
+        z_vel = vel[2] if vel is not None else 0
+        
         # Draw tracking info
         info = [
             f"ID: {track_id}",
-            f"Vel: {np.linalg.norm(track['velocity']):.2f}m/s" if track['velocity'] is not None else "Vel: -",
-            f"Z: {track['positions'][-1][2]:.2f}m" if len(track['positions']) > 0 else "Z: -"
+            f"Vel: {vel_norm:.2f}m/s" if vel is not None else "Vel: -",
+            f"Z: {track['positions'][-1][2]:.2f}m" if track['positions'] else "Z: -",
+            f"Z-Vel: {z_vel:.2f}m/s" if vel is not None else "",
+            "IMPACT!" if track.get('impact', False) else ""
         ]
         
         for i, text in enumerate(info):
-            cv2.putText(frame, text, (x1, y1 - 30 + i*20), 
-                      cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
-
-
+            if text:  # Only draw non-empty strings
+                cv2.putText(frame, text, (x1, y1 - 30 + i*15), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                
     def _save_impacts(self):
+        """Save impact data to CSV file"""
         if not self.impact_data:
             print("No impacts detected during this run")
             return
             
         with open('impacts.csv', 'w') as f:
-            f.write("id,x,y,z,vx,vy,vz,speed,energy,time\n")
+            f.write("id,x,y,z,vx,vy,vz,speed,time\n")
             for impact in self.impact_data:
                 f.write(
                     f"{impact['id']},"
                     f"{impact['position'][0]},{impact['position'][1]},{impact['position'][2]},"
                     f"{impact['velocity'][0]},{impact['velocity'][1]},{impact['velocity'][2]},"
                     f"{impact['speed']},"
-                    f"{impact['energy']},"
                     f"{impact['time']}\n"
                 )
         print(f"Saved {len(self.impact_data)} impacts to impacts.csv")
 
+    def _save_tracking_data(self):
+        """Save complete tracking data to JSON file"""
+        data = {
+            'impacts': self.impact_data,
+            'tracks': {},
+            'settings': {
+                'ground_z': self.ground_z,
+                'min_impact_speed': self.min_impact_speed,
+                'timestamp': time.strftime("%Y-%m-%d %H:%M:%S")
+            }
+        }
+        
+        for track_id, track in self.tracks_3d.items():
+            data['tracks'][track_id] = {
+                'positions': [p.tolist() for p in track['positions']],
+                'timestamps': track['timestamps'],
+                'final_velocity': track['velocity'].tolist() if track['velocity'] is not None else None,
+                'impact': track['impact']
+            }
+        
+        with open('tracking_results.json', 'w') as f:
+            json.dump(data, f, indent=2)
+        print("Saved tracking data to tracking_results.json")
+
     def run(self):
+        self.frame_times.append(time.time() - self.start_time)
         try:
+            self.show_both_views = True  # Always show both views by default
+            
             while True:
                 if not self.paused:
                     frames = self.camera.get_frames()
@@ -267,42 +355,42 @@ class HailstoneTracker:
                                 self._get_center(right_bbox)
                             )
                             self._update_track(left_id, position)
+                            
+                            # Draw on both views
                             self._draw_tracking_info(frame_left_rect, left_bbox, left_id)
-                            self._draw_tracking_info(frame_right_rect, right_bbox, right_id)
+                            self._draw_tracking_info(frame_right_rect, right_bbox, left_id)
                         except Exception as e:
                             print(f"Tracking error: {e}")
                             continue
                 
-                # Display frames
-                if self.show_both_views:
-                    # Combine frames side by side
-                    display_frame = np.hstack((frame_left_rect, frame_right_rect))
-                else:
-                    display_frame = frame_left_rect
+                # Display both views side by side
+                display_frame = np.hstack((frame_left_rect, frame_right_rect))
+                cv2.imshow("3D Object Tracker", display_frame)
                 
-                cv2.imshow("Hailstone Tracker", display_frame)
-                
-                # Keyboard controls
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord('q'):
                     break
                 elif key == ord(' '):  # Space to pause/resume
                     self.paused = not self.paused
                     print("Paused" if self.paused else "Resumed")
-                elif key == ord('v'):  # Toggle view
-                    self.show_both_views = not self.show_both_views
+                elif key == ord('v'):  # Toggle view (though we're forcing both views now)
+                    pass  # Optionally remove this or keep for debugging
                     
         finally:
             self.camera.release()
             cv2.destroyAllWindows()
             self._save_impacts()
+            self._save_tracking_data()  # Add this new method
 
 if __name__ == "__main__":
-    tracker = HailstoneTracker(
+    tracker = ObjectTracker3D(
         config_path="config/camera_params.json",
         video_sources=(
             "test_videos/left.mp4",
             "test_videos/right.mp4"
         )
     )
+    
     tracker.run()
+
+    

@@ -134,7 +134,7 @@ def simulate(hailstones: list[hail]):
 
             # Clear frame
             left[:] = frame
-            right[:] = frame[:][::-1]
+            right[:] = frame
 
             # iterate through hailstones - hailstones is dynamic and is updated through n, m
             for h in hailstones:

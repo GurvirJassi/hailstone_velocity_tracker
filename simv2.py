@@ -3,6 +3,7 @@ import random
 import numpy as np
 import time 
 import math
+import copy
 
 class hail:
 
@@ -42,7 +43,7 @@ class hail:
         self.vz = self.velocity[2]
 
     # increment position by time [s]
-    def fallfor(self, t):
+    def fallFor(self, t):
         
         # update positions
         for c in range(3):
@@ -70,20 +71,26 @@ class hail:
         self.t = 0
         self.updateComponents()
 
+    # returns refreshed copy of this instance
+    def copy(self):
+        return hail(self.start_pos, self.velocity, self.radius, self.color)
+
 # python simv2.py
 
 # camera/video settings
 camHeight = 1080 # [pixels]
 camWidth = 1920 # [pixels]
-fps = 30
+fps = 60
 spf = 1/fps
 
 # physical space settings
 realHeight = 1.0 # [m]
 realWidth = 1920/1080 # [m]
 
-def simulate(hailstones: list):
+def simulate(hailstones: list[hail]):
     
+    og = [copy.deepcopy(h) for h in hailstones]
+
     # Statements always run but put away for code cleanliness
     if True:
 
@@ -119,19 +126,30 @@ def simulate(hailstones: list):
     while running:
         
         if not paused:
+
             # Clear frame
             left[:] = 0
             right[:] = 0
 
-            # iterate through hailstones
+            # iterate through hailstones - hailstones is dynamic and is updated through n, m
             for h in hailstones:
-                h.moveTo(t) # critical
+                #h.moveTo(t) # critical # old
+                h.fallFor(spf)
                 # debug: print(t, h.position)
                 # draw on left
                 cv2.circle(left, (int(h.y*pperm), int(h.z*pperm)), int(h.radius*pperm), h.color, -1)
                 # draw on right
                 cv2.circle(right, (camWidth-int(h.x*pperm), int(h.z*pperm)), int(h.radius*pperm), h.color, -1)
-            
+                if h.z>realHeight*1.05: 
+                    hailstones.remove(h)
+                    print ("item removed")
+
+            #debug
+            try: 
+                print (hailstones[0].z) #debug
+            except:
+                print("Nothing in the tank")
+
             # Combine frames
             combined = np.hstack((left, separator, right))
 
@@ -151,15 +169,24 @@ def simulate(hailstones: list):
         if key == ord(' '):
             paused = not paused
             #print(f"Simulation {'paused' if paused else 'resumed'} at time {t:.2f}s")
+
         elif key == ord('r') or key == ord('R'):
-            t = 0
+            simulate(og)
+            break
             #print("Simulation restarted")
+
         elif key == 27 or key == ord('q') or key == ord('Q'):
             running = False
             #print(f"Simulation ended at time {t:.2f}s")
+
         elif key == ord('n') or key == ord('N'):
-            simulate(generate_hailstones(len(hailstones)))
+            #for h in og:
+            #    h.reset()
+            simulate(generate_hailstones(len(og)))
             break
+
+        elif key == ord('m') or key == ord('M'):
+            hailstones += generate_hailstones(len(og))
 
         if paused:
             cv2.imshow('Simulation', combined)
@@ -170,9 +197,9 @@ def simulate(hailstones: list):
 def generate_hailstones(num_hailstones: int, 
                        position_range: tuple = (0, realWidth),
                        sideways_velocity_range: tuple = (0.01, 4),
-                       vertical_velocity_range: tuple = (3, 17),
+                       vertical_velocity_range: tuple = (3, 10),
                        radius_range: tuple = (0.00025,0.03),
-                       color_variance: int = 35) -> list[hail]:
+                       color_variance: int = 30) -> list[hail]:
     """
     Generates multiple hailstone objects with randomized properties
     
@@ -214,11 +241,13 @@ def generate_hailstones(num_hailstones: int,
     
     return hailstones
 
+# antiquities
 a = hail([0,0,0], [2, 7, 8])
 b = hail([0.5,0.5,0.04],[10,10,10])
 hailstones = [a, b]
 
-#def slideshow(interval: tuple ):
+#def slideshow(interval: tuple =  (0,5)):
+
 
 
 

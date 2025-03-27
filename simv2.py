@@ -104,10 +104,10 @@ def simulate(hailstones: list):
     cv2.resizeWindow('Simulation', int(window_width/2), int(window_height/2))
     cv2.setWindowProperty('Simulation', cv2.WND_PROP_ASPECT_RATIO, cv2.WINDOW_KEEPRATIO)
     
-    print("Controls:")
-    print("Space: Pause/Resume")
-    print("R: Restart simulation")
-    print("Q or Esc: Quit")
+    #print("Controls:")
+    #print("Space: Pause/Resume")
+    #print("R: Restart simulation")
+    #print("Q or Esc: Quit")
 
     while running:
         
@@ -149,7 +149,7 @@ def simulate(hailstones: list):
             #print("Simulation restarted")
         elif key == 27 or key == ord('q') or key == ord('Q'):
             running = False
-            print(f"Simulation ended at time {t:.2f}s")
+            #print(f"Simulation ended at time {t:.2f}s")
         
         if paused:
             cv2.imshow('Simulation', combined)

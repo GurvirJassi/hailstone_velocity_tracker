@@ -9,8 +9,8 @@ class hail:
     def __init__(self, position: list, velocity: list):
         
         # save position and velocity vectors
-        self.position = position
-        self.start_pos = position
+        self.start_pos = list(position)
+        self.position = list(position)
         self.velocity = velocity
 
         self.updateComponents()
@@ -50,13 +50,13 @@ class hail:
 
     # move to position at time [s]
     def moveTo(self, t):
-
+        
+        self.t = t
         # update positions
         for c in range(3):
-            self.position[c] = self.start_pos[c] + self.velocity[c] * t 
+            self.position[c] = self.start_pos[c] + self.velocity[c] * self.t 
         
         # update time
-        self.t = t
         self.updateComponents()
 
     # reset hail
@@ -78,7 +78,7 @@ spf = 1/fps
 realHeight = 1.0 # [m]
 realWidth = 1920/1080 # [m]
 
-def simulate(hailstone: list[hail]):
+def simulate(hailstones: list):
     
     # scaling factor
     mperp = realWidth/camWidth
@@ -110,6 +110,7 @@ def simulate(hailstone: list[hail]):
     print("Q or Esc: Quit")
 
     while running:
+        
         if not paused:
             # Clear frame
             left[:] = 0
@@ -117,8 +118,8 @@ def simulate(hailstone: list[hail]):
 
             # iterate through hailstones
             for h in hailstones:
-                h.moveTo(t)
-                print(h.position)
+                h.moveTo(t) # critical
+                # debug: print(t, h.position)
                 # draw on left
                 cv2.circle(left, (int(h.y*pperm), int(h.z*pperm)), int(h.radius*pperm), h.color, -1)
                 # draw on right
@@ -142,10 +143,10 @@ def simulate(hailstone: list[hail]):
         
         if key == ord(' '):
             paused = not paused
-            print(f"Simulation {'paused' if paused else 'resumed'} at time {t:.2f}s")
+            #print(f"Simulation {'paused' if paused else 'resumed'} at time {t:.2f}s")
         elif key == ord('r') or key == ord('R'):
             t = 0
-            print("Simulation restarted")
+            #print("Simulation restarted")
         elif key == 27 or key == ord('q') or key == ord('Q'):
             running = False
             print(f"Simulation ended at time {t:.2f}s")
@@ -157,10 +158,9 @@ def simulate(hailstone: list[hail]):
     cv2.destroyAllWindows()
 
 
-
-
 a = hail([0,0,0], [2, 7, 8])
-hailstones = [a]
+b = hail([0.5,0.5,0.04],[0,0,1])
+hailstones = [a, b]
 
-print (a.v)
+print (a.v, b.v)
 simulate(hailstones)

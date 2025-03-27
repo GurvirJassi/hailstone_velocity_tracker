@@ -99,4 +99,4 @@ while f <= end_f:
     # Draw the circle
     #cv2.circle(frame, (center_x, center_y), radius, color, thickness)
     
-
+python simv2.py

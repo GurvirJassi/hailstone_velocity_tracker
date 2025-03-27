@@ -5,6 +5,7 @@ import time
 import math
 import copy
 
+# hail class from which every hail object is created 
 class hail:
 
     # (position[m], velocity[m/s])
@@ -75,18 +76,19 @@ class hail:
     def copy(self):
         return hail(self.start_pos, self.velocity, self.radius, self.color)
 
-# python simv2.py
+# camera and physical settings
+if True:
+    # camera/video settings
+    camHeight = 1920 # [pixels]
+    camWidth = 1080 # [pixels]
+    fps = 120
+    spf = 1/fps
 
-# camera/video settings
-camHeight = 1920 # [pixels]
-camWidth = 1080 # [pixels]
-fps = 120
-spf = 1/fps
+    # physical space settings
+    realHeight = (0.5*1920/1080) # 1.0 # [m]
+    realWidth = 0.50 # 1920/1080 # [m]
 
-# physical space settings
-realHeight = (0.5*1920/1080) # 1.0 # [m]
-realWidth = 0.50 # 1920/1080 # [m]
-
+# create simulation window and save video
 def simulate(hailstones: list[hail]):
     
     og = [copy.deepcopy(h) for h in hailstones]
@@ -213,6 +215,7 @@ def simulate(hailstones: list[hail]):
     right_video.release()
     cv2.destroyAllWindows()
 
+# generate a variety of hailstone objects 
 def generate_hailstones(num_hailstones: int, 
                        position_range: tuple = (0, realWidth),
                        sideways_velocity_range: tuple = (3, 3),
@@ -234,7 +237,8 @@ def generate_hailstones(num_hailstones: int,
     """
     hailstones = []
     base_color = (220, 230, 240)  # Base whitish color
-    
+
+    # generate all hailstones based on parameter
     for _ in range(num_hailstones):
         # Random position within range
         pos = [random.uniform(*position_range), random.uniform(*position_range), 0]
@@ -259,15 +263,5 @@ def generate_hailstones(num_hailstones: int,
         print(vel[2])
     
     return hailstones
-
-# antiquities
-a = hail([0,0,0], [2, 7, 8])
-b = hail([0.5,0.5,0.04],[10,10,10])
-hailstones = [a, b]
-
-#def slideshow(interval: tuple =  (0,5)):
-
-
-
 
 simulate(generate_hailstones(3))

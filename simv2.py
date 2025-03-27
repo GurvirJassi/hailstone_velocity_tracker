@@ -1,4 +1,5 @@
 import cv2
+import random
 import numpy as np
 import time 
 import math
@@ -6,12 +7,18 @@ import math
 class hail:
 
     # (position[m], velocity[m/s])
-    def __init__(self, position: list, velocity: list):
+    def __init__(self,
+                position: list,
+                velocity: list,
+                radius: float = 0.02, # [m]
+                color: tuple = (244, 255, 220)):
         
         # save position and velocity vectors
         self.start_pos = list(position)
         self.position = list(position)
-        self.velocity = velocity
+        self.velocity = list(velocity)
+        self.radius = float(radius)
+        self.color = tuple(color)
 
         self.updateComponents()
 
@@ -20,9 +27,6 @@ class hail:
 
         # time [s]
         self.t = 0
-        
-        self.radius = 0.02 # [m]
-        self.color = (255, 255, 255)
 
     # update accessor variables
     def updateComponents(self):
@@ -80,34 +84,37 @@ realWidth = 1920/1080 # [m]
 
 def simulate(hailstones: list):
     
-    # scaling factor
-    mperp = realWidth/camWidth
-    pperm = 1/mperp
+    # Statements always run but put away for code cleanliness
+    if True:
 
-    t = 0  # Time variable
-    paused = False
-    running = True
+        # scaling factor
+        mperp = realWidth/camWidth
+        pperm = 1/mperp
 
-    # creating video frames
-    left = np.zeros((camHeight, camWidth, 3), dtype=np.uint8)
-    right = np.zeros((camHeight, camWidth, 3), dtype=np.uint8)
+        t = 0  # Time variable
+        paused = False
+        running = True
 
-    separator_width = 5
-    separator = np.full((left.shape[0], separator_width, 3), (255, 255, 255), dtype=np.uint8)
+        # creating video frames
+        left = np.zeros((camHeight, camWidth, 3), dtype=np.uint8)
+        right = np.zeros((camHeight, camWidth, 3), dtype=np.uint8)
 
-   # Calculate combined window size
-    window_width = camWidth * 2 + separator_width
-    window_height = camHeight
-    
-    # Create a named window with fixed size
-    cv2.namedWindow('Simulation', cv2.WINDOW_KEEPRATIO)
-    cv2.resizeWindow('Simulation', int(window_width/2), int(window_height/2))
-    cv2.setWindowProperty('Simulation', cv2.WND_PROP_ASPECT_RATIO, cv2.WINDOW_KEEPRATIO)
-    
-    #print("Controls:")
-    #print("Space: Pause/Resume")
-    #print("R: Restart simulation")
-    #print("Q or Esc: Quit")
+        separator_width = 5
+        separator = np.full((left.shape[0], separator_width, 3), (255, 255, 255), dtype=np.uint8)
+
+    # Calculate combined window size
+        window_width = camWidth * 2 + separator_width
+        window_height = camHeight
+        
+        # Create a named window with fixed size
+        cv2.namedWindow('Simulation', cv2.WINDOW_KEEPRATIO)
+        cv2.resizeWindow('Simulation', int(window_width/2), int(window_height/2))
+        cv2.setWindowProperty('Simulation', cv2.WND_PROP_ASPECT_RATIO, cv2.WINDOW_KEEPRATIO)
+        
+        #print("Controls:")
+        #print("Space: Pause/Resume")
+        #print("R: Restart simulation")
+        #print("Q or Esc: Quit")
 
     while running:
         
@@ -157,10 +164,56 @@ def simulate(hailstones: list):
     
     cv2.destroyAllWindows()
 
+def generate_hailstones(num_hailstones: int, 
+                       position_range: tuple = (0, realWidth),
+                       sideways_velocity_range: tuple = (0.01, 3.5),
+                       vertical_velocity_range: tuple = (5, 15),
+                       radius_range: tuple = (0.005, 0.03),
+                       color_variance: int = 35) -> list[hail]:
+    """
+    Generates multiple hailstone objects with randomized properties
+    
+    Args:
+        num_hailstones: Number of hailstones to generate
+        position_range: (min, max) for x,y,z starting positions (meters)
+        velocity_range: (min, max) for velocity components (m/s)
+        radius_range: (min, max) for hailstone radii (meters)
+        color_variance: Max deviation from base whitish color (0-255)
+    
+    Returns:
+        List of hail objects
+    """
+    hailstones = []
+    base_color = (220, 230, 240)  # Base whitish color
+    
+    for _ in range(num_hailstones):
+        # Random position within range
+        pos = [random.uniform(*position_range), random.uniform(*position_range), 0]
+
+        # Random velocity within range (all positive)
+        vel = [(random.uniform(*sideways_velocity_range)* -1 if random.random() < 0.5 else 1),
+               (random.uniform(*sideways_velocity_range)* -1 if random.random() < 0.5 else 1),
+                random.uniform(*vertical_velocity_range)] # z component must be positive
+        
+        # Random radius within range
+        radius = random.uniform(*radius_range)
+        
+        # Slightly randomized whitish color
+        color = tuple(
+            min(255, max(200, base_color[i] + random.randint(-color_variance, color_variance)))
+            for i in range(3)
+        )
+        
+        # Create hailstone with these properties
+        hailstones.append(hail(position=pos, velocity=vel, radius=radius, color=color))
+
+        print(vel[2])
+    
+    return hailstones
 
 a = hail([0,0,0], [2, 7, 8])
-b = hail([0.5,0.5,0.04],[0,0,1])
+b = hail([0.5,0.5,0.04],[10,10,10])
 hailstones = [a, b]
 
 print (a.v, b.v)
-simulate(hailstones)
+simulate(generate_hailstones(5))

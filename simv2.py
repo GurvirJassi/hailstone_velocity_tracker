@@ -157,7 +157,10 @@ def simulate(hailstones: list):
         elif key == 27 or key == ord('q') or key == ord('Q'):
             running = False
             #print(f"Simulation ended at time {t:.2f}s")
-        
+        elif key == ord('n') or key == ord('N'):
+            simulate(generate_hailstones(len(hailstones)))
+            break
+
         if paused:
             cv2.imshow('Simulation', combined)
             time.sleep(0.1)
@@ -166,9 +169,9 @@ def simulate(hailstones: list):
 
 def generate_hailstones(num_hailstones: int, 
                        position_range: tuple = (0, realWidth),
-                       sideways_velocity_range: tuple = (0.01, 3.5),
-                       vertical_velocity_range: tuple = (5, 15),
-                       radius_range: tuple = (0.005, 0.03),
+                       sideways_velocity_range: tuple = (0.01, 4),
+                       vertical_velocity_range: tuple = (3, 17),
+                       radius_range: tuple = (0.00025,0.03),
                        color_variance: int = 35) -> list[hail]:
     """
     Generates multiple hailstone objects with randomized properties
@@ -215,5 +218,8 @@ a = hail([0,0,0], [2, 7, 8])
 b = hail([0.5,0.5,0.04],[10,10,10])
 hailstones = [a, b]
 
-print (a.v, b.v)
-simulate(generate_hailstones(5))
+#def slideshow(interval: tuple ):
+
+
+
+simulate(generate_hailstones(15))

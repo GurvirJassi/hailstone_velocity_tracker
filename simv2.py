@@ -21,8 +21,8 @@ class hail:
         # time [s]
         self.t = 0
         
-        self.radius = 0.04 # [m]
-        self.color = (244, 255, 220)
+        self.radius = 0.02 # [m]
+        self.color = (255, 255, 255)
 
     # update accessor variables
     def updateComponents(self):
@@ -88,10 +88,21 @@ def simulate(hailstone: list[hail]):
     paused = False
     running = True
 
-   
+    # creating video frames
+    left = np.zeros((camHeight, camWidth, 3), dtype=np.uint8)
+    right = np.zeros((camHeight, camWidth, 3), dtype=np.uint8)
+
+    separator_width = 5
+    separator = np.full((left.shape[0], separator_width, 3), (255, 255, 255), dtype=np.uint8)
+
+   # Calculate combined window size
+    window_width = camWidth * 2 + separator_width
+    window_height = camHeight
     
-    # Create a named window
+    # Create a named window with fixed size
     cv2.namedWindow('Simulation', cv2.WINDOW_KEEPRATIO)
+    cv2.resizeWindow('Simulation', int(window_width/2), int(window_height/2))
+    cv2.setWindowProperty('Simulation', cv2.WND_PROP_ASPECT_RATIO, cv2.WINDOW_KEEPRATIO)
     
     print("Controls:")
     print("Space: Pause/Resume")
@@ -99,12 +110,6 @@ def simulate(hailstone: list[hail]):
     print("Q or Esc: Quit")
 
     while running:
-    # creating video frames
-        left = np.zeros((camHeight, camWidth, 3), dtype=np.uint8)
-        right = np.zeros((camHeight, camWidth, 3), dtype=np.uint8)
-
-        separator_width = 5
-        separator = np.full((left.shape[0], separator_width, 3), (255, 255, 255), dtype=np.uint8)
         if not paused:
             # Clear frame
             left[:] = 0
@@ -113,10 +118,11 @@ def simulate(hailstone: list[hail]):
             # iterate through hailstones
             for h in hailstones:
                 h.moveTo(t)
+                print(h.position)
                 # draw on left
-                cv2.circle(left, (int(h.y*pperm), int(h.z*pperm)), int(h.radius*pperm), h.color, 0)
+                cv2.circle(left, (int(h.y*pperm), int(h.z*pperm)), int(h.radius*pperm), h.color, -1)
                 # draw on right
-                cv2.circle(left, (camWidth-int(h.y*pperm), int(h.z*pperm)), int(h.radius*pperm), h.color, 0)
+                cv2.circle(right, (camWidth-int(h.x*pperm), int(h.z*pperm)), int(h.radius*pperm), h.color, -1)
             
             # Combine frames
             combined = np.hstack((left, separator, right))
@@ -131,30 +137,30 @@ def simulate(hailstone: list[hail]):
             time.sleep(spf)
             t += spf
 
-        # Handle keyboard input
-        key = cv2.waitKey(1)
+       # Handle keyboard input
+        key = cv2.waitKey(1) & 0xFF
         
-        if key == ord(' '):  # Space toggles pause
+        if key == ord(' '):
             paused = not paused
-
-        elif key == ord('r') or key == ord('R'):  # R restarts
+            print(f"Simulation {'paused' if paused else 'resumed'} at time {t:.2f}s")
+        elif key == ord('r') or key == ord('R'):
             t = 0
-            paused = False
-
-        elif key == 27 or key == ord('q') or key == ord('Q'):  # Esc or Q quits
+            print("Simulation restarted")
+        elif key == 27 or key == ord('q') or key == ord('Q'):
             running = False
+            print(f"Simulation ended at time {t:.2f}s")
         
         if paused:
-            # Still process frames when paused to keep window responsive
             cv2.imshow('Simulation', combined)
-            time.sleep(0.1)  # Reduce CPU usage when paused
+            time.sleep(0.1)
     
     cv2.destroyAllWindows()
 
 
 
 
-a = hail([0,0,0], [10, 10, 10])
+a = hail([0,0,0], [2, 7, 8])
 hailstones = [a]
 
+print (a.v)
 simulate(hailstones)

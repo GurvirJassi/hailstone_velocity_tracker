@@ -78,14 +78,14 @@ class hail:
 # python simv2.py
 
 # camera/video settings
-camHeight = 1080 # [pixels]
-camWidth = 1920 # [pixels]
+camHeight = 1920 # [pixels]
+camWidth = 1080 # [pixels]
 fps = 120
 spf = 1/fps
 
 # physical space settings
-realHeight = 1.0 # [m]
-realWidth = 1920/1080 # [m]
+realHeight = (0.5*1920/1080) # 1.0 # [m]
+realWidth = 0.50 # 1920/1080 # [m]
 
 def simulate(hailstones: list[hail]):
     
@@ -123,18 +123,23 @@ def simulate(hailstones: list[hail]):
         #print("R: Restart simulation")
         #print("Q or Esc: Quit")
 
+    # Video writers initialization
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    left_video = cv2.VideoWriter('left_view.mp4', fourcc, fps, (camWidth, camHeight))
+    right_video = cv2.VideoWriter('right_view.mp4', fourcc, fps, (camWidth, camHeight))
+
     #creating gradient frame
     ratio = np.linspace(0, 1, camWidth).reshape(1, -1, 1)
-    frame = (0,0,230) * (1 - ratio) + (0,200,170) * ratio
-    frame = frame.astype(np.uint8)
+    gradient = (0,0,230) * (1 - ratio) + (0,200,170) * ratio
+    gradient = gradient.astype(np.uint8)
 
     while running:
         
         if not paused:
 
             # Clear frame
-            left[:] = frame
-            right[:] = frame
+            left[:] = 0
+            right[:] = 0
 
             # iterate through hailstones - hailstones is dynamic and is updated through n, m
             for h in hailstones:
@@ -148,6 +153,8 @@ def simulate(hailstones: list[hail]):
                 if h.z>realHeight*1.05: 
                     hailstones.remove(h)
                     print ("item removed")
+                print(h.v)
+
 
             #debug
             '''try: 
@@ -161,7 +168,7 @@ def simulate(hailstones: list[hail]):
 
             # Display status text
             status = "Running" if not paused else "Paused"
-            cv2.putText(combined, f"Status: {status} | Time: {t:.2f}s", (60, 60), 
+            cv2.putText(combined, f"Time: {t:.2f}s", (60, 60), 
                        cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 2)
             
             cv2.imshow('Simulation', combined)
@@ -171,7 +178,11 @@ def simulate(hailstones: list[hail]):
 
        # Handle keyboard input
         key = cv2.waitKey(1) & 0xFF
-        
+
+        # Write frames to separate videos
+        left_video.write(left)
+        right_video.write(right)
+
         if key == ord(' '):
             paused = not paused
             #print(f"Simulation {'paused' if paused else 'resumed'} at time {t:.2f}s")
@@ -197,13 +208,15 @@ def simulate(hailstones: list[hail]):
         if paused:
             cv2.imshow('Simulation', combined)
             time.sleep(0.1)
-    
+        
+    left_video.release()
+    right_video.release()
     cv2.destroyAllWindows()
 
 def generate_hailstones(num_hailstones: int, 
                        position_range: tuple = (0, realWidth),
-                       sideways_velocity_range: tuple = (0.01, 4),
-                       vertical_velocity_range: tuple = (3, 10),
+                       sideways_velocity_range: tuple = (3, 3),
+                       vertical_velocity_range: tuple = (5, 9),
                        radius_range: tuple = (0.00025,0.03),
                        color_variance: int = 30) -> list[hail]:
     """
@@ -257,4 +270,4 @@ hailstones = [a, b]
 
 
 
-simulate(generate_hailstones(15))
+simulate(generate_hailstones(3))

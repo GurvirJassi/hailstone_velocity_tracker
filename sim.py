@@ -19,7 +19,6 @@ class Coordinate:
         self.z += dz
 
 
-
 size = 500
 
 # Starting coordinates
@@ -30,7 +29,9 @@ frame = np.zeros((size, size, 3), dtype=np.uint8)
 end_t = 10
 end_f = 1000
 
-spf = end_t/end_f # second per frame
+fps = 30
+
+spf = 1/30 # second per frame
 
 window_name = "front view"
 
@@ -44,10 +45,10 @@ while f <= end_f:
     frame[:] = 0
 
     # Draw circle
-    cv2.circle(frame,(int(p1.x*size), int(p1.z*size)), 10, (0, 255, 0), -1)
+    cv2.circle(frame,(int(p1.x*size/10), int(p1.z*size/10)), 10, (0, 255, 0), -1)
 
     # Update Coordinates
-    p1.move(0.1, 0.1, 0.1)
+    p1.move(0.2, 0.1, 0.4)
 
     # Display
     cv2.imshow(window_name, frame)
@@ -58,19 +59,17 @@ while f <= end_f:
     key = cv2.waitKey(1)
     if key == ord("q"):
         break
+    if key == ord("r"):
+        p1 = Coordinate(0, 0, 0)
+        f = 0
 
     # Auto-break if object leaves frame
-        if p1.x > size or p1.z > size:
-            print("Object left frame")
-            break
+        #if p1.x > size or p1.z > size:
+         #   print("Object left frame")
+          #  break
 
     
-
-    
-    
-    
-cv2.destroyAllWindows()
-cv2.destroyWindow("ZY Plane")
+#cv2.destroyAllWindows()
 
 # taskkill /f /im python.exe
 

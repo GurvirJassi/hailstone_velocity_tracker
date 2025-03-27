@@ -80,7 +80,7 @@ class hail:
 # camera/video settings
 camHeight = 1080 # [pixels]
 camWidth = 1920 # [pixels]
-fps = 60
+fps = 120
 spf = 1/fps
 
 # physical space settings
@@ -123,13 +123,18 @@ def simulate(hailstones: list[hail]):
         #print("R: Restart simulation")
         #print("Q or Esc: Quit")
 
+    #creating gradient frame
+    ratio = np.linspace(0, 1, camWidth).reshape(1, -1, 1)
+    frame = (0,0,230) * (1 - ratio) + (0,200,170) * ratio
+    frame = frame.astype(np.uint8)
+
     while running:
         
         if not paused:
 
             # Clear frame
-            left[:] = 0
-            right[:] = 0
+            left[:] = frame
+            right[:] = frame[:][::-1]
 
             # iterate through hailstones - hailstones is dynamic and is updated through n, m
             for h in hailstones:
@@ -145,10 +150,11 @@ def simulate(hailstones: list[hail]):
                     print ("item removed")
 
             #debug
-            try: 
+            '''try: 
                 print (hailstones[0].z) #debug
-            except:
-                print("Nothing in the tank")
+            finally:
+                
+                print("Nothing in the tank")'''
 
             # Combine frames
             combined = np.hstack((left, separator, right))

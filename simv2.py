@@ -127,8 +127,8 @@ def simulate(hailstones: list[hail]):
 
     # Video writers initialization
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    left_video = cv2.VideoWriter('left_view.mp4', fourcc, fps, (camWidth, camHeight))
-    right_video = cv2.VideoWriter('right_view.mp4', fourcc, fps, (camWidth, camHeight))
+    left_video = cv2.VideoWriter('sim_videos/left_view.mp4', fourcc, fps, (camWidth, camHeight))
+    right_video = cv2.VideoWriter('sim_videos/right_view.mp4', fourcc, fps, (camWidth, camHeight))
 
     #creating gradient frame
     ratio = np.linspace(0, 1, camWidth).reshape(1, -1, 1)

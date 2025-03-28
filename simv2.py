@@ -81,7 +81,7 @@ if True:
     # camera/video settings
     camHeight = 1920 # [pixels]
     camWidth = 1080 # [pixels]
-    fps = 120
+    fps = 240
     spf = 1/fps
 
     # physical space settings
@@ -264,4 +264,6 @@ def generate_hailstones(num_hailstones: int,
     
     return hailstones
 
-simulate(generate_hailstones(3))
+simulate(generate_hailstones(1))
+
+# python simv2.py

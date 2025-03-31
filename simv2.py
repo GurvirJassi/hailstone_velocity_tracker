@@ -79,14 +79,15 @@ class hail:
 # camera and physical settings
 if True:
     # camera/video settings
-    camHeight = 1920 # [pixels]
-    camWidth = 1080 # [pixels]
-    fps = 240
+    camHeight =  1920 # [pixels]
+    camWidth =  1080 # [pixels]
+    fps = 30
     spf = 1/fps
 
     # physical space settings
-    realHeight = (0.5*1920/1080) # 1.0 # [m]
-    realWidth = 0.50 # 1920/1080 # [m]
+    scale = 0.5
+    realHeight = 1920/1080 * scale # 1.0 # [m]
+    realWidth = 1 * scale # 1920/1080 # [m]
 
 # create simulation window and save video
 def simulate(hailstones: list[hail]):
@@ -154,10 +155,7 @@ def simulate(hailstones: list[hail]):
                 cv2.circle(right, (camWidth-int(h.x*pperm), int(h.z*pperm)), int(h.radius*pperm), h.color, -1)
                 if h.z>realHeight*1.05: 
                     hailstones.remove(h)
-                    print ("item removed")
-                print(h.v)
-
-
+                    
             #debug
             '''try: 
                 print (hailstones[0].z) #debug
@@ -165,14 +163,18 @@ def simulate(hailstones: list[hail]):
                 
                 print("Nothing in the tank")'''
 
-            # Combine frames
-            combined = np.hstack((left, separator, right))
 
             # Display status text
             status = "Running" if not paused else "Paused"
-            cv2.putText(combined, f"Time: {t:.2f}s", (60, 60), 
+            cv2.putText(left, f"Time: {t:.2f}s", (60, 60), 
                        cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 2)
             
+            cv2.putText(right, f"Time: {t:.2f}s", (60, 60), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 2)
+            
+            # Combine frames
+            combined = np.hstack((left, separator, right))
+
             cv2.imshow('Simulation', combined)
 
             time.sleep(spf)
@@ -218,9 +220,9 @@ def simulate(hailstones: list[hail]):
 # generate a variety of hailstone objects 
 def generate_hailstones(num_hailstones: int, 
                        position_range: tuple = (0, realWidth),
-                       sideways_velocity_range: tuple = (3, 3),
-                       vertical_velocity_range: tuple = (5, 9),
-                       radius_range: tuple = (0.00025,0.03),
+                       sideways_velocity_range: float = 5,
+                       vertical_velocity_range: tuple = (3, 8),
+                       radius_range: tuple = (0.005,0.02),
                        color_variance: int = 30) -> list[hail]:
     """
     Generates multiple hailstone objects with randomized properties
@@ -244,13 +246,17 @@ def generate_hailstones(num_hailstones: int,
         pos = [random.uniform(*position_range), random.uniform(*position_range), 0]
 
         # Random velocity within range (all positive)
-        vel = [(random.uniform(*sideways_velocity_range)* -1 if random.random() < 0.5 else 1),
-               (random.uniform(*sideways_velocity_range)* -1 if random.random() < 0.5 else 1),
+        vel = [random.uniform(-sideways_velocity_range, sideways_velocity_range),
+               random.uniform(-sideways_velocity_range, sideways_velocity_range),
                 random.uniform(*vertical_velocity_range)] # z component must be positive
         
+        print(vel)
+
         # Random radius within range
         radius = random.uniform(*radius_range)
         
+        print(radius)
+
         # Slightly randomized whitish color
         color = tuple(
             min(255, max(200, base_color[i] + random.randint(-color_variance, color_variance)))
@@ -259,9 +265,7 @@ def generate_hailstones(num_hailstones: int,
         
         # Create hailstone with these properties
         hailstones.append(hail(position=pos, velocity=vel, radius=radius, color=color))
-
-        print(vel[2])
-    
+        print(hailstones[-1].v)
     return hailstones
 
 simulate(generate_hailstones(1))

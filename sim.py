@@ -80,7 +80,7 @@ if True:
     # camera/video settings
     camHeight =  1920 # [pixels]
     camWidth =  1080 # [pixels]
-    fps = 30
+    fps = 1020
     spf = 1/fps
 
     # physical space settings
@@ -128,8 +128,8 @@ def simulate(hailstones: list[hail]):
 
     # Video writers initialization
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    left_video = cv2.VideoWriter('sim_videos/left_view.mp4', fourcc, fps, (camWidth, camHeight))
-    right_video = cv2.VideoWriter('sim_videos/right_view.mp4', fourcc, fps, (camWidth, camHeight))
+    left_video = cv2.VideoWriter('videos/left_view.mp4', fourcc, fps, (camWidth, camHeight))
+    right_video = cv2.VideoWriter('videos/right_view.mp4', fourcc, fps, (camWidth, camHeight))
 
     #creating gradient frame
     ratio = np.linspace(0, 1, camWidth).reshape(1, -1, 1)
@@ -150,9 +150,9 @@ def simulate(hailstones: list[hail]):
                 h.fallFor(spf)
                 # debug: print(t, h.position)
                 # draw on left
-                cv2.circle(left, (int(h.y*pperm), int(h.z*pperm)), int(h.radius*pperm), h.color, -1)
+                cv2.circle(left, (int(h.y*pperm), int(h.z*pperm)), int(h.radius*pperm), h.color, -1, lineType=cv2.LINE_AA)
                 # draw on right
-                cv2.circle(right, (camWidth-int(h.x*pperm), int(h.z*pperm)), int(h.radius*pperm), h.color, -1)
+                cv2.circle(right, (camWidth-int(h.x*pperm), int(h.z*pperm)), int(h.radius*pperm), h.color, -1, lineType=cv2.LINE_AA)
                 if h.z>realHeight*1.05: 
                     hailstones.remove(h)
                     
@@ -222,10 +222,10 @@ def simulate(hailstones: list[hail]):
 
 # generate a variety of hailstone objects 
 def generate_hailstones(num_hailstones: int, 
-                       position_range: tuple = (0, realWidth*3/4),
+                       position_range: tuple = (0, realWidth),
                        sideways_velocity_range: float = 2,
-                       vertical_velocity_range: tuple = (3, 8),
-                       radius_range: tuple = (0.005,0.02),
+                       vertical_velocity_range: tuple = (3, 5),
+                       radius_range: tuple = (0.05,0.08),
                        color_variance: int = 30) -> list[hail]:
     """
     Generates multiple hailstone objects with randomized properties

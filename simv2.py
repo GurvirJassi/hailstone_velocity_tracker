@@ -93,6 +93,7 @@ if True:
 def simulate(hailstones: list[hail]):
     
     og = [copy.deepcopy(h) for h in hailstones]
+    frame = 0
 
     # Statements always run but put away for code cleanliness
     if True:
@@ -166,18 +167,21 @@ def simulate(hailstones: list[hail]):
 
             # Display status text
             status = "Running" if not paused else "Paused"
-            cv2.putText(left, f"Time: {t:.2f}s", (60, 60), 
+            '''cv2.putText(left, f"Time: {t:.2f}s", (60, 60), 
                        cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 2)
             
             cv2.putText(right, f"Time: {t:.2f}s", (60, 60), 
                        cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 2)
-            
+            '''
             # Combine frames
             combined = np.hstack((left, separator, right))
-
+            cv2.putText(combined, f"Time: {t:.2f}s", (60, 60), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 2)
+            
             cv2.imshow('Simulation', combined)
 
             time.sleep(spf)
+            frame += 1
             t += spf
 
        # Handle keyboard input
@@ -207,8 +211,9 @@ def simulate(hailstones: list[hail]):
             break
 
         elif key == ord('m') or key == ord('M'):
+            print(frame)
             hailstones += generate_hailstones(len(og))
-
+            
         if paused:
             cv2.imshow('Simulation', combined)
             time.sleep(0.1)
@@ -250,7 +255,9 @@ def generate_hailstones(num_hailstones: int,
                random.uniform(-sideways_velocity_range, sideways_velocity_range),
                 random.uniform(*vertical_velocity_range)] # z component must be positive
         
-        print(vel)
+        print(vel[1])
+        print(vel[2])
+
 
         # Random radius within range
         radius = random.uniform(*radius_range)
@@ -265,7 +272,7 @@ def generate_hailstones(num_hailstones: int,
         
         # Create hailstone with these properties
         hailstones.append(hail(position=pos, velocity=vel, radius=radius, color=color))
-        print(hailstones[-1].v)
+
     return hailstones
 
 simulate(generate_hailstones(1))

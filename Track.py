@@ -77,7 +77,7 @@ if __name__ == "__main__":
     main("sim_videos\left_view.mp4")
     
     import time
-    time.sleep(2)
+    #time.sleep(2)
 
     from SortDetections import main
     main()

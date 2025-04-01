@@ -39,29 +39,21 @@ def velocity(p1, p2):
     #returns magnitude distance
     distance = math.sqrt((p2[1] - p1[1]) ** 2 + (p2[2] - p1[2]) ** 2)
 
-    #time = (frame diff) / (fps)
+    time = frame_diff / 30
 
     distanceVer = p2[2] - p1[1]
     distanceHor = p2[1] - p1[1]
 
     #Velocity = distance/time
-    velVer = distanceVer / frame_diff
-    velHor = distanceHor / frame_diff
+    velVer = distanceVer / time
+    velHor = distanceHor / time
 
      #Returns magnitude velocity
     velMag = distance / frame_diff
 
     return velVer, velHor, velMag
 
-   
 
-def load_pixel_to_meter():
-    try:
-        with open("pixelToMeter.txt", 'r') as file:
-            return float(file.read().strip())
-    except Exception as e:
-        print(f"Error loading pixel-to-meter ratio: {e}")
-        return None
 
 def filter_hailstones(hailstones, pixel_meter_ratio, max_radius_diff=2, max_velocity_deviation=2.0):
     """Filters hailstones by ensuring consistent motion and radius."""
@@ -116,11 +108,11 @@ def filter_hailstones(hailstones, pixel_meter_ratio, max_radius_diff=2, max_velo
                 #print(f"{d1}\n{d2}\n{d3}, n:{detectionNum}")
 
 
-                velPixelsVer = round(((v1Ver + v2Ver) / 2), 2)
-                velMetersVer = round(velPixelsVer * pixel_meter_ratio, 2)
+                velPixelsVer = round(((v1Ver + v2Ver) / 2), 5)
+                velMetersVer = round(velPixelsVer * pixel_meter_ratio, 5)
 
-                velPixelsHor = round(((v1Hor + v2Hor) / 2), 2)
-                velMetersHor = round(velPixelsHor * pixel_meter_ratio, 2)
+                velPixelsHor = round(((v1Hor + v2Hor) / 2), 5)
+                velMetersHor = round(velPixelsHor * pixel_meter_ratio, 5)
 
 
                 # If all tests pass, consider this a valid hailstone

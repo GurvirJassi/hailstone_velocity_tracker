@@ -7,7 +7,6 @@ import copy
 
 # hail class from which every hail object is created 
 class hail:
-
     # (position[m], velocity[m/s])
     def __init__(self,
                 position: list,
@@ -85,7 +84,7 @@ if True:
     spf = 1/fps
 
     # physical space settings
-    scale = 0.5
+    scale = 1
     realHeight = 1920/1080 * scale # 1.0 # [m]
     realWidth = 1 * scale # 1920/1080 # [m]
 
@@ -211,7 +210,6 @@ def simulate(hailstones: list[hail]):
             break
 
         elif key == ord('m') or key == ord('M'):
-            print(frame)
             hailstones += generate_hailstones(len(og))
             
         if paused:
@@ -224,8 +222,8 @@ def simulate(hailstones: list[hail]):
 
 # generate a variety of hailstone objects 
 def generate_hailstones(num_hailstones: int, 
-                       position_range: tuple = (0, realWidth),
-                       sideways_velocity_range: float = 5,
+                       position_range: tuple = (0, realWidth*3/4),
+                       sideways_velocity_range: float = 2,
                        vertical_velocity_range: tuple = (3, 8),
                        radius_range: tuple = (0.005,0.02),
                        color_variance: int = 30) -> list[hail]:
@@ -255,15 +253,13 @@ def generate_hailstones(num_hailstones: int,
                random.uniform(-sideways_velocity_range, sideways_velocity_range),
                 random.uniform(*vertical_velocity_range)] # z component must be positive
         
-        print(vel[1])
-        print(vel[2])
+        print(f"real velocity: {vel}")
+        
 
 
         # Random radius within range
         radius = random.uniform(*radius_range)
         
-        print(radius)
-
         # Slightly randomized whitish color
         color = tuple(
             min(255, max(200, base_color[i] + random.randint(-color_variance, color_variance)))

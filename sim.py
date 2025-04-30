@@ -1,102 +1,276 @@
 import cv2
+import random
 import numpy as np
 import time 
+import math
+import copy
 
+# hail class from which every hail object is created 
+class hail:
+    # (position[m], velocity[m/s])
+    def __init__(self,
+                position: list,
+                velocity: list,
+                radius: float = 0.02, # [m]
+                color: tuple = (244, 255, 220)):
+        
+        # save position and velocity vectors
+        self.start_pos = list(position)
+        self.position = list(position)
+        self.velocity = list(velocity)
+        self.radius = float(radius)
+        self.color = tuple(color)
 
+        self.updateComponents()
 
-class Coordinate:
-    def __init__(self, x: int, y: int, z: int):
-        self.x = x
-        self.y = y
-        self.z = z
+        # velocity [m/s]
+        self.v = math.sqrt(self.vx**2 + self.vy**2 + self.vz**2)
 
-    def __repr__(self):
-        return f"Coordinate(x={self.x}, y={self.y}, z={self.z})"
+        # time [s]
+        self.t = 0
 
-    def move(self, dx: int, dy: int, dz: int) -> None:
-        self.x += dx
-        self.y += dy
-        self.z += dz
+    # update accessor variables
+    def updateComponents(self):
 
+        # position components [m]
+        self.x = self.position[0]
+        self.y = self.position[1]
+        self.z = self.position[2]
 
-size = 500
+        # velocity components [m/s]
+        self.vx = self.velocity[0]
+        self.vy = self.velocity[1]
+        self.vz = self.velocity[2]
 
-# Starting coordinates
-p1 = Coordinate(0, 0, 0)
+    # increment position by time [s]
+    def fallFor(self, t):
+        
+        # update positions
+        for c in range(3):
+            self.position[c] += self.velocity[c] * t 
+        
+        # update time
+        self.t += t
+        self.updateComponents()
 
-frame = np.zeros((size, size, 3), dtype=np.uint8)
+    # move to position at time [s]
+    def moveTo(self, t):
+        
+        self.t = t
+        # update positions
+        for c in range(3):
+            self.position[c] = self.start_pos[c] + self.velocity[c] * self.t 
+        
+        # update time
+        self.updateComponents()
 
-end_t = 10
-end_f = 1000
+    # reset hail
+    def reset(self):
 
-fps = 30
+        self.position = self.start_pos
+        self.t = 0
+        self.updateComponents()
 
-spf = 1/30 # second per frame
+    # returns refreshed copy of this instance
+    def copy(self):
+        return hail(self.start_pos, self.velocity, self.radius, self.color)
 
-window_name = "front view"
+# camera and physical settings
+if True:
+    # camera/video settings
+    camHeight =  1920 # [pixels]
+    camWidth =  1080 # [pixels]
+    fps = 1020
+    spf = 1/fps
 
-# Create window
-cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    # physical space settings
+    scale = 1
+    realHeight = 1920/1080 * scale # 1.0 # [m]
+    realWidth = 1 * scale # 1920/1080 # [m]
 
-f = 0
-while f <= end_f:
+# create simulation window and save video
+def simulate(hailstones: list[hail]):
     
-    # Clear frame
-    frame[:] = 0
+    og = [copy.deepcopy(h) for h in hailstones]
+    frame = 0
 
-    # Draw circle
-    cv2.circle(frame,(int(p1.x*size/10), int(p1.z*size/10)), 10, (0, 255, 0), -1)
+    # Statements always run but put away for code cleanliness
+    if True:
 
-    # Update Coordinates
-    p1.move(0.2, 0.1, 0.4)
+        # scaling factor
+        mperp = realWidth/camWidth
+        pperm = 1/mperp
 
-    # Display
-    cv2.imshow(window_name, frame)
-     
-    time.sleep(spf)
-    f += 1
+        t = 0  # Time variable
+        paused = False
+        running = True
 
-    key = cv2.waitKey(1)
-    if key == ord("q"):
-        break
-    if key == ord("r"):
-        p1 = Coordinate(0, 0, 0)
-        f = 0
+        # creating video frames
+        left = np.zeros((camHeight, camWidth, 3), dtype=np.uint8)
+        right = np.zeros((camHeight, camWidth, 3), dtype=np.uint8)
 
-    # Auto-break if object leaves frame
-        #if p1.x > size or p1.z > size:
-         #   print("Object left frame")
-          #  break
+        separator_width = 5
+        separator = np.full((left.shape[0], separator_width, 3), (255, 255, 255), dtype=np.uint8)
 
+    # Calculate combined window size
+        window_width = camWidth * 2 + separator_width
+        window_height = camHeight
+        
+        # Create a named window with fixed size
+        cv2.namedWindow('Simulation', cv2.WINDOW_KEEPRATIO)
+        cv2.resizeWindow('Simulation', int(window_width/2), int(window_height/2))
+        cv2.setWindowProperty('Simulation', cv2.WND_PROP_ASPECT_RATIO, cv2.WINDOW_KEEPRATIO)
+        
+        #print("Controls:")
+        #print("Space: Pause/Resume")
+        #print("R: Restart simulation")
+        #print("Q or Esc: Quit")
+
+    # Video writers initialization
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    left_video = cv2.VideoWriter('videos/left_view.mp4', fourcc, fps, (camWidth, camHeight))
+    right_video = cv2.VideoWriter('videos/right_view.mp4', fourcc, fps, (camWidth, camHeight))
+
+    #creating gradient frame
+    ratio = np.linspace(0, 1, camWidth).reshape(1, -1, 1)
+    gradient = (0,0,230) * (1 - ratio) + (0,200,170) * ratio
+    gradient = gradient.astype(np.uint8)
+
+    while running:
+        
+        if not paused:
+
+            # Clear frame
+            left[:] = 0
+            right[:] = 0
+
+            # iterate through hailstones - hailstones is dynamic and is updated through n, m
+            for h in hailstones:
+                #h.moveTo(t) # critical # old
+                h.fallFor(spf)
+                # debug: print(t, h.position)
+                # draw on left
+                cv2.circle(left, (int(h.y*pperm), int(h.z*pperm)), int(h.radius*pperm), h.color, -1, lineType=cv2.LINE_AA)
+                # draw on right
+                cv2.circle(right, (camWidth-int(h.x*pperm), int(h.z*pperm)), int(h.radius*pperm), h.color, -1, lineType=cv2.LINE_AA)
+                if h.z>realHeight*1.05: 
+                    hailstones.remove(h)
+                    
+            #debug
+            '''try: 
+                print (hailstones[0].z) #debug
+            finally:
+                
+                print("Nothing in the tank")'''
+
+
+            # Display status text
+            status = "Running" if not paused else "Paused"
+            '''cv2.putText(left, f"Time: {t:.2f}s", (60, 60), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 2)
+            
+            cv2.putText(right, f"Time: {t:.2f}s", (60, 60), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 2)
+            '''
+            # Combine frames
+            combined = np.hstack((left, separator, right))
+            cv2.putText(combined, f"Time: {t:.2f}s", (60, 60), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 2)
+            
+            cv2.imshow('Simulation', combined)
+
+            time.sleep(spf)
+            frame += 1
+            t += spf
+
+       # Handle keyboard input
+        key = cv2.waitKey(1) & 0xFF
+
+        # Write frames to separate videos
+        left_video.write(left)
+        right_video.write(right)
+
+        if key == ord(' '):
+            paused = not paused
+            #print(f"Simulation {'paused' if paused else 'resumed'} at time {t:.2f}s")
+
+        elif key == ord('r') or key == ord('R'):
+            simulate(og)
+            break
+            #print("Simulation restarted")
+
+        elif key == 27 or key == ord('q') or key == ord('Q'):
+            running = False
+            #print(f"Simulation ended at time {t:.2f}s")
+
+        elif key == ord('n') or key == ord('N'):
+            #for h in og:
+            #    h.reset()
+            simulate(generate_hailstones(len(og)))
+            break
+
+        elif key == ord('m') or key == ord('M'):
+            hailstones += generate_hailstones(len(og))
+            
+        if paused:
+            cv2.imshow('Simulation', combined)
+            time.sleep(0.1)
+        
+    left_video.release()
+    right_video.release()
+    cv2.destroyAllWindows()
+
+# generate a variety of hailstone objects 
+def generate_hailstones(num_hailstones: int, 
+                       position_range: tuple = (0, realWidth),
+                       sideways_velocity_range: float = 2,
+                       vertical_velocity_range: tuple = (3, 5),
+                       radius_range: tuple = (0.05,0.08),
+                       color_variance: int = 30) -> list[hail]:
+    """
+    Generates multiple hailstone objects with randomized properties
     
-#cv2.destroyAllWindows()
-
-# taskkill /f /im python.exe
-
-
-
-
-
-
-
-# Create a window
-#cv2.namedWindow('Live Video', cv2.WINDOW_NORMAL)
-
-# Video properties
-#width, height = 640, 480
-#fps = 1
-
-
-# Main loop to generate and display frames
-#frame_count = 0
-#while True:
-
+    Args:
+        num_hailstones: Number of hailstones to generate
+        position_range: (min, max) for x,y,z starting positions (meters)
+        velocity_range: (min, max) for velocity components (m/s)
+        radius_range: (min, max) for hailstone radii (meters)
+        color_variance: Max deviation from base whitish color (0-255)
     
-    #radius = 30
-    #color = (0, 255, 0)  # Green in BGR format
-    #thickness = 2
+    Returns:
+        List of hail objects
+    """
+    hailstones = []
+    base_color = (220, 230, 240)  # Base whitish color
 
-    # Draw the circle
-    #cv2.circle(frame, (center_x, center_y), radius, color, thickness)
-    
+    # generate all hailstones based on parameter
+    for _ in range(num_hailstones):
+        # Random position within range
+        pos = [random.uniform(*position_range), random.uniform(*position_range), 0]
 
+        # Random velocity within range (all positive)
+        vel = [random.uniform(-sideways_velocity_range, sideways_velocity_range),
+               random.uniform(-sideways_velocity_range, sideways_velocity_range),
+                random.uniform(*vertical_velocity_range)] # z component must be positive
+        
+        print(f"real velocity: {vel}")
+        
+
+
+        # Random radius within range
+        radius = random.uniform(*radius_range)
+        
+        # Slightly randomized whitish color
+        color = tuple(
+            min(255, max(200, base_color[i] + random.randint(-color_variance, color_variance)))
+            for i in range(3)
+        )
+        
+        # Create hailstone with these properties
+        hailstones.append(hail(position=pos, velocity=vel, radius=radius, color=color))
+
+    return hailstones
+
+simulate(generate_hailstones(1))
+
+# python simv2.py
